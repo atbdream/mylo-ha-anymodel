@@ -44,6 +44,8 @@ def test_load_config_defaults_when_no_options_file(monkeypatch, tmp_path: Path) 
     assert cfg.context_budget_factor == 0.6
     assert cfg.context_output_reserve_tokens == 8000
     assert cfg.working_set_max_entities == 40
+    assert cfg.openai_base_url == ""
+    assert cfg.fallback_models == ()
 
 
 def test_load_config_reads_options_file(monkeypatch, tmp_path: Path) -> None:
@@ -54,6 +56,8 @@ def test_load_config_reads_options_file(monkeypatch, tmp_path: Path) -> None:
                 "api_key": "sk-test",
                 "llm_provider": "anthropic",
                 "model": "claude-sonnet-4-6",
+                "openai_base_url": "https://anymodel.org/v1",
+                "fallback_models": "primary/model, backup/one, backup/two",
                 "sync_frequency": "weekly",
                 "memory_token_limit": 12000,
                 "proactive_notifications": False,
@@ -71,6 +75,8 @@ def test_load_config_reads_options_file(monkeypatch, tmp_path: Path) -> None:
     assert cfg.sync_frequency == "weekly"
     assert cfg.memory_token_limit == 12000
     assert cfg.proactive_notifications is False
+    assert cfg.openai_base_url == "https://anymodel.org/v1"
+    assert cfg.fallback_models == ("primary/model", "backup/one", "backup/two")
     # quiet_hours_start is a deprecated leftover in stored options —
     # ignored without error, and no longer a config field.
     assert not hasattr(cfg, "quiet_hours_start")

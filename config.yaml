@@ -1,11 +1,10 @@
 # Home Assistant add-on manifest.
 # Docs: https://developers.home-assistant.io/docs/add-ons/configuration
-name: Mylo
-version: "1.9.1"
-slug: mylo
+name: Mylo Private
+version: "1.9.1-anymodel.1"
+slug: mylo_private
 description: AI agent that lives inside Home Assistant — deep context, memory, and safe config editing.
-url: https://github.com/Oasis-Enterprise/mylo
-image: ghcr.io/oasis-enterprise/{arch}-addon-mylo
+url: https://github.com/atbdream/mylo-ha-anymodel
 arch:
   - amd64
   - aarch64
@@ -32,6 +31,8 @@ options:
   memory_token_limit: 8000
   proactive_notifications: true
   ollama_url: ""
+  openai_base_url: ""
+  fallback_models: ""
   session_budget_usd: 0.50
   monthly_budget_usd: 15.00
   context_budget_factor: 0.6
@@ -45,6 +46,8 @@ schema:
   model: str
   reconciliation_model: str
   ollama_url: "str?"
+  openai_base_url: "str?"
+  fallback_models: "str?"
   sync_frequency: list(nightly|weekly|manual)
   memory_token_limit: int(1000,64000)
   proactive_notifications: bool

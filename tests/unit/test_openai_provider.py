@@ -21,6 +21,11 @@ OpenAI's chat completions format and back.
 
 from __future__ import annotations
 
+from types import SimpleNamespace
+from unittest.mock import AsyncMock
+
+from openai import APIStatusError
+
 from mylo.llm.openai_provider import _convert_messages, _convert_tools
 
 
@@ -117,3 +122,44 @@ def test_default_max_tokens_fits_a_full_view() -> None:
 
     sig = inspect.signature(OpenAIProvider.message)
     assert sig.parameters["max_tokens"].default == 8192
+
+
+async def test_transient_error_uses_fallback_model() -> None:
+    from mylo.llm.openai_provider import OpenAIProvider
+
+    provider = OpenAIProvider(
+        "sk-test",
+        base_url="https://anymodel.org/v1",
+        fallback_models=("backup/one", "backup/two"),
+    )
+    rate_limit = APIStatusError(
+        "rate limited",
+        response=SimpleNamespace(request=object(), status_code=429, headers={}),
+        body=None,
+    )
+    response = SimpleNamespace(
+        choices=[
+            SimpleNamespace(
+                message=SimpleNamespace(content="ok", tool_calls=[]),
+                finish_reason="stop",
+            )
+        ],
+        usage=SimpleNamespace(prompt_tokens=10, completion_tokens=2),
+    )
+    create = AsyncMock(side_effect=[rate_limit, response])
+    provider._client = SimpleNamespace(  # type: ignore[assignment]
+        chat=SimpleNamespace(completions=SimpleNamespace(create=create))
+    )
+
+    result = await provider.message(
+        system="system",
+        messages=[{"role": "user", "content": "hello"}],
+        tools=[],
+        model="primary/model",
+    )
+
+    assert result.text == "ok"
+    assert [call.kwargs["model"] for call in create.await_args_list] == [
+        "primary/model",
+        "backup/one",
+    ]

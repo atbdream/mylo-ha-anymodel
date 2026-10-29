@@ -38,6 +38,8 @@ def make_config(tmp_path: Path) -> AppConfig:
         model="x",
         reconciliation_model="y",
         ollama_url="",
+        openai_base_url="",
+        fallback_models=(),
         sync_frequency="nightly",
         memory_token_limit=8000,
         proactive_notifications=False,

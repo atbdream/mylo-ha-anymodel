@@ -9,7 +9,7 @@ Mylo connects deeply to your HA instance over websocket — it knows your entiti
 ## Install
 
 1. **Settings → Add-ons → Add-on Store → ⋮ → Repositories**
-2. Add: `https://github.com/Oasis-Enterprise/mylo`
+2. Add: `https://github.com/atbdream/mylo-ha-anymodel`
 3. Install **Mylo**, set your API key in the Configuration tab
 4. Start — it appears as a sidebar panel. The first screen explains how approval works and offers clickable starting points.
 
@@ -407,7 +407,7 @@ The footer shows `budget: Nk/<window> tokens · cost: $X.XX this session` in rea
 Requires Python 3.12+, Node 20+.
 
 ```bash
-git clone https://github.com/Oasis-Enterprise/mylo.git
+git clone https://github.com/atbdream/mylo-ha-anymodel.git
 cd mylo
 
 python3 -m venv .venv

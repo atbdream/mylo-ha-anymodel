@@ -160,7 +160,12 @@ def _create_provider(config: AppConfig) -> Any:
             return None
         from mylo.llm.openai_provider import OpenAIProvider
 
-        return OpenAIProvider(api_key=openai_key, default_model=model)
+        return OpenAIProvider(
+            api_key=openai_key,
+            base_url=config.openai_base_url or None,
+            default_model=model,
+            fallback_models=config.fallback_models,
+        )
 
     if config.llm_provider == "gemini":
         gemini_key = os.environ.get("GEMINI_API_KEY") or api_key

@@ -36,7 +36,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from openai import APIConnectionError, AsyncOpenAI
+from openai import APIConnectionError, APIStatusError, APITimeoutError, AsyncOpenAI
 
 from mylo.llm.provider import ProviderMessage, ProviderResponse, ToolCall
 from mylo.logging_setup import get_logger
@@ -51,10 +51,12 @@ class OpenAIProvider:
         *,
         base_url: str | None = None,
         default_model: str | None = None,
+        fallback_models: tuple[str, ...] | list[str] | None = None,
     ) -> None:
         self._api_key = api_key
         self._base_url = base_url
         self._default_model = default_model
+        self._fallback_models = tuple(dict.fromkeys(fallback_models or ()))
         self._client = AsyncOpenAI(
             api_key=api_key,
             base_url=base_url,
@@ -72,27 +74,47 @@ class OpenAIProvider:
         oai_messages = _convert_messages(system, messages)
         oai_tools = _convert_tools(tools)
 
-        resolved_model = self._default_model or model
+        resolved_model = model or self._default_model
+        if not resolved_model:
+            raise ValueError("an OpenAI model must be configured")
         # OpenAI's newer models (gpt-5.x, o1, o3, etc.) require
         # max_completion_tokens instead of max_tokens. Use the new
         # parameter for all models — it's forward-compatible.
         kwargs: dict[str, Any] = {
-            "model": resolved_model,
             "messages": oai_messages,
             "max_completion_tokens": max_tokens,
         }
         if oai_tools:
             kwargs["tools"] = oai_tools
 
-        try:
-            response = await self._client.chat.completions.create(**kwargs)
-        except APIConnectionError:
-            log.warning("openai.connection_error_retrying")
-            self._client = AsyncOpenAI(
-                api_key=self._api_key,
-                base_url=self._base_url,
-            )
-            response = await self._client.chat.completions.create(**kwargs)
+        models = tuple(dict.fromkeys((resolved_model, *self._fallback_models)))
+        last_error: Exception | None = None
+        for index, candidate_model in enumerate(models):
+            try:
+                response = await self._client.chat.completions.create(
+                    model=candidate_model, **kwargs
+                )
+                if index:
+                    log.info("openai.fallback_succeeded", model=candidate_model)
+                break
+            except (APIConnectionError, APITimeoutError, APIStatusError) as exc:
+                if not _is_transient_error(exc) or index == len(models) - 1:
+                    raise
+                last_error = exc
+                log.warning(
+                    "openai.model_failed_trying_fallback",
+                    model=candidate_model,
+                    fallback_model=models[index + 1],
+                    error_type=type(exc).__name__,
+                )
+                if isinstance(exc, APIConnectionError):
+                    self._client = AsyncOpenAI(
+                        api_key=self._api_key,
+                        base_url=self._base_url,
+                    )
+        else:  # pragma: no cover - defensive; the final failure is re-raised above
+            assert last_error is not None
+            raise last_error
 
         choice = response.choices[0] if response.choices else None
         if choice is None:
@@ -113,6 +135,9 @@ class OpenAIProvider:
             text_parts.append(msg.content)
 
         for tc in msg.tool_calls or []:
+            if tc.type != "function":
+                log.warning("openai.unsupported_tool_call_type", tool_call_type=tc.type)
+                continue
             try:
                 args = json.loads(tc.function.arguments) if tc.function.arguments else {}
             except json.JSONDecodeError:
@@ -148,6 +173,15 @@ class OpenAIProvider:
             stop_reason=stop_reason,
             usage=usage,
         )
+
+
+def _is_transient_error(exc: Exception) -> bool:
+    """Return whether another configured model may reasonably recover the request."""
+    if isinstance(exc, (APIConnectionError, APITimeoutError)):
+        return True
+    if isinstance(exc, APIStatusError):
+        return exc.status_code in {408, 409, 429} or exc.status_code >= 500
+    return False
 
 
 def _convert_messages(system: str, messages: list[ProviderMessage]) -> list[dict[str, Any]]:
